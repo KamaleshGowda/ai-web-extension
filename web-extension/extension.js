@@ -1,123 +1,77 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const summarizeBtn = document.getElementById("summarizeBtn");
-    const queryBtn = document.getElementById("queryBtn");
-    const uploadBtn = document.getElementById("uploadBtn");
-    const askBtn = document.getElementById("askBtn");
-    const sourceInput = document.getElementById("sourceInput");
-    const summaryResult = document.getElementById("summaryResult");
-    const queryDialog = document.getElementById("queryDialog");
-    const queryInput = document.getElementById("queryInput");
-    const queryResponse = document.getElementById("queryResponse");
-    const fileInput = document.getElementById("fileInput");
-    const closeModal = document.querySelector(".close");
+# query/views.py
+import os
+from django.http import JsonResponse
+from dotenv import load_dotenv
+from django.views.decorators.csrf import csrf_exempt
+from langchain_groq import ChatGroq
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.prompts import ChatPromptTemplate
+from summarize.views import load_documents
 
-    // Fetch the current tab's URL and display it
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs.length > 0) {
-            sourceInput.value = "Source: " + tabs[0].url;  // Set URL in the input field
-        } else {
-            sourceInput.value = "Source: Could not fetch URL";
-        }
-    });
+load_dotenv()
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
-    // Function to summarize content
-    summarizeBtn.addEventListener("click", async () => {
-        const source = sourceInput.value.trim();
-        const uploadedFileElement = document.getElementById("fileInput");
-        const uploadedFile = uploadedFileElement.files[0];
-        let formData = new FormData();
+llm = ChatGroq(model="gemma2-9b-it", api_key=GROQ_API_KEY)
 
-        if (uploadedFile) {
-            formData.append("file", uploadedFile); // Send the file for summarization
-            sourceInput.value = "Source: Uploaded File"; // Update source input
-        } else if (source && source !== "Source: Could not fetch URL") {
-            formData.append("source", source.replace("Source: ", "")); // Send the URL for summarization
-        } else {
-            alert("Please open a valid webpage or upload a file.");
-            return;
-        }
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        try {
-            const response = await fetch("http://127.0.0.1:8000/summarize/", {
-                method: "POST",
-                body: formData
-            });
-            const data = await response.json();
-            summaryResult.innerText = data.summary || "Error in summarization.";
-        } catch (error) {
-            console.error("Error:", error);
-            summaryResult.innerText = "Failed to fetch summary.";
-        }
-    });
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
-    // Function to open query dialog
-    queryBtn.addEventListener("click", () => {
-        queryDialog.style.display = "block";
-    });
+def process_and_store_documents(docs):
+    if not docs:
+        return None
+    splits = text_splitter.split_documents(docs)
+    if not splits:
+        return None
+    try:
+        vector_db = Chroma.from_documents(documents=splits, embedding=embeddings)
+        return vector_db.as_retriever()
+    except Exception as e:
+        return None
 
-    // Function to ask a query
-    askBtn.addEventListener("click", async () => {
-        const queryText = queryInput.value.trim();
-        const source = sourceInput.value.trim();
-        const uploadedFileElement = document.getElementById("fileInput");
-        const uploadedFile = uploadedFileElement.files[0];
-        const formData = new FormData();
+def query_documents(retriever, user_query):
+    system_prompt = (
+        "You are an assistant for question-answering tasks. "
+        "Use the retrieved context to answer the question. If unknown, say so. "
+        "Keep answers concise, max three sentences.\n\n{context}"
+    )
+    chat_prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}")
+    ])
+    qa_chain = create_stuff_documents_chain(llm, chat_prompt)
+    rag_chain = create_retrieval_chain(retriever, qa_chain)
+    response = rag_chain.invoke({"input": user_query})
+    return response['answer']
 
-         if (uploadedFile) {
-            formData.append("file", uploadedFile); // Send the file for querying
-        } else {
-            formData.append("source", source.replace("Source: ", ""));
-        }
-        formData.append("query", queryText);
+@csrf_exempt
+def query_view(request):
+    if request.method == 'POST':
+        source = request.POST.get('source', '').strip()
+        user_query = request.POST.get('query', '').strip()
+        uploaded_file = request.FILES.get('file')
 
-        try {
-            const response = await fetch("http://127.0.0.1:8000/query/", {
-                method: "POST",
-                body: formData
-            });
-            const data = await response.json();
-            queryResponse.innerText = data.answer || "Error processing query.";
-        } catch (error) {
-            console.error("Error:", error);
-            queryResponse.innerText = "Failed to fetch answer.";
-        }
-    });
+        if not source and not uploaded_file:
+            return JsonResponse({"error": "Source or file and query are required."}, status=400)
+        if not user_query:
+            return JsonResponse({"error": "Query is required."}, status=400)
 
-    // Function to upload file
-    uploadBtn.addEventListener("click", () => {
-        fileInput.click();
-    });
+        docs = load_documents(source=source, uploaded_file=uploaded_file)
+        if isinstance(docs, str):
+            return JsonResponse({"error": docs}, status=400)
 
-    fileInput.addEventListener("change", async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
+        if docs:
+            retriever = process_and_store_documents(docs)
+            if retriever:
+                answer = query_documents(retriever, user_query)
+                return JsonResponse({"answer": answer})
+            else:
+                return JsonResponse({"error": "Could not process documents for querying."}, status=400)
+        else:
+            return JsonResponse({"error": "Could not load documents for querying."}, status=400)
 
-        const formData = new FormData();
-        formData.append("file", file);
-
-        try {
-            const response = await fetch("http://127.0.0.1:8000/upload/", {
-                method: "POST",
-                body: formData
-            });
-            const data = await response.json();
-            summaryResult.innerText = data.message || "File uploaded successfully!"; // Display success message
-            sourceInput.value = "Source: Uploaded File"; // Update source input
-            // You might want to store the filename or some identifier here if needed for later actions
-        } catch (error) {
-            console.error("Error:", error);
-            summaryResult.innerText = "File upload failed.";
-        }
-    });
-
-    // Close the modal
-    closeModal.addEventListener("click", () => {
-        queryDialog.style.display = "none";
-    });
-
-    window.onclick = (event) => {
-        if (event.target === queryDialog) {
-            queryDialog.style.display = "none";
-        }
-    };
-});
+    return JsonResponse({"error": "Invalid request"}, status=400)
