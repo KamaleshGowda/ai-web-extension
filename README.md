@@ -7,7 +7,7 @@
 2. Create a Virtual Environment to install dependencies:
     ```bash
     python -m venv venv
-    source venv/bin/activate
+    venv\Scripts\activate
     ```
 
 3. Install all dependencies from the `requirements.txt` file:
