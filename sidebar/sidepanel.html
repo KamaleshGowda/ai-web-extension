@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>inText AI</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="marked.min.js"></script>
+    <script src="purify.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>inText AI</h1>
+        <p class="tagline">Browse made simple</p>
+    </div>
+
+    <div class="source-display">
+        Source: <span id="sourceInput"></span>
+    </div>
+
+    <div id="chat-container" class="scrollable">
+        <div id="summaryResult"></div> </div>
+
+    <div class="bottom-controls">
+        <div class="action-buttons">
+            <button id="summarizeBtn">Summarize</button>
+            <button id="uploadBtn" title="Upload file">+</button>
+            <input type="file" id="fileInput" style="display: none;">
+        </div>
+        <div class="query-input-area">
+            <input type="text" id="queryInput" placeholder="Enter your query">
+            <button id="askBtn" title="Ask query">&gt;</button>
+        </div>
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+</html>

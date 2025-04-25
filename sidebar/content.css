@@ -1,0 +1,23 @@
+/* content.css */
+.ocr-trigger-button {
+    position: absolute;
+    z-index: 2147483647; /* Max z-index */
+    background-color: rgba(0, 0, 0, 0.75);
+    color: white;
+    border: 1px solid white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: sans-serif;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    line-height: 1;
+    /* Prevent text selection */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  
+  .ocr-trigger-button:hover {
+    background-color: rgba(0, 0, 0, 0.9);
+  }
