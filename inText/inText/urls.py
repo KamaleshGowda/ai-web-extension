@@ -6,4 +6,5 @@ urlpatterns = [
     path('summarize/', include('summarize.urls')),
     path('query/', include('query.urls')),
     path('upload/', include('upload_handler.urls')),
+    path('ocr/', include('ocr.urls')),
 ]
